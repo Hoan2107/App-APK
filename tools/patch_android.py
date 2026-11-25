@@ -39,4 +39,37 @@ with open("tools/MainActivity.kt.txt", encoding="utf-8") as f:
 with open(kt_files[0], "w", encoding="utf-8") as f:
     f.write(code)
 
+# Ép mọi module Android (kể cả plugin cũ như file_picker) dùng compileSdk 36
+# để qua bước kiểm tra AAR metadata của Gradle/AGP bản mới.
+SNIPPET = """// --- sms_bulk: ép compileSdk cho mọi plugin ---
+subprojects {
+    afterEvaluate {
+        try {
+            val ext = extensions.findByName("android")
+            ext?.javaClass?.methods
+                ?.firstOrNull { it.name == "setCompileSdk" && it.parameterCount == 1 }
+                ?.invoke(ext, 36)
+        } catch (e: Exception) {
+            println("compileSdk override skipped for ${project.name}: ${e.message}")
+        }
+    }
+}
+// --- hết ---
+
+"""
+
+import os
+
+gradle_kts = "android/build.gradle.kts"
+if os.path.exists(gradle_kts):
+    with open(gradle_kts, encoding="utf-8") as f:
+        g = f.read()
+    if "sms_bulk: ép compileSdk" not in g:
+        # Phải đặt TRƯỚC khối evaluationDependsOn(":app") của template.
+        with open(gradle_kts, "w", encoding="utf-8") as f:
+            f.write(SNIPPET + g)
+    print("OK: đã vá", gradle_kts)
+else:
+    print("CẢNH BÁO: không thấy android/build.gradle.kts, bỏ qua bước ép compileSdk")
+
 print(f"OK: đã vá {MANIFEST} và {kt_files[0]} (package {package})")
