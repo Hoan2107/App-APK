@@ -53,6 +53,8 @@ class SmsService : Service() {
         const val NOTIF_ID = 4711
     }
 
+    private val namePattern =
+        Regex("\\{+\\s*(ten|tên|name)\\s*\\}+", RegexOption.IGNORE_CASE)
     private val handler = Handler(Looper.getMainLooper())
     private var wakeLock: PowerManager.WakeLock? = null
     private val tick = Runnable { sendNext() }
@@ -92,7 +94,12 @@ class SmsService : Service() {
 
         val name = SmsJob.names[i]
         val phone = SmsJob.phones[i]
-        val text = SmsJob.message.replace("{ten}", if (name.isEmpty()) "bạn" else name)
+        val display = if (name.isEmpty()) "bạn" else name
+        // Thay {ten}/{Ten}/{TEN}/{{ten}}... bằng tên thật, rồi xoá mọi dấu { } còn sót
+        // để tin nhắn gửi đi tuyệt đối không có ngoặc nhọn.
+        val text = namePattern.replace(SmsJob.message) { display }
+            .replace("{", "")
+            .replace("}", "")
 
         try {
             sendSms(phone, text)
