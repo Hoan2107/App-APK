@@ -1,0 +1,16 @@
+name: sms_bulk
+description: Gui SMS hang loat tu danh sach so dien thoai.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <5.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  file_picker: ^8.1.2
+  archive: ^3.6.1
+
+flutter:
+  uses-material-design: true
