@@ -26,6 +26,9 @@ object SmsJob {
     var results = StringBuilder()
     var errors = HashMap<Int, String>()
 
+    /** Thời điểm (ms) đã xử lý từng người, 0 = chưa gửi. */
+    var times = ArrayList<Long>()
+
     @Volatile var index = 0
     @Volatile var sent = 0
     @Volatile var failed = 0
@@ -39,6 +42,7 @@ object SmsJob {
         message = ""
         results = StringBuilder()
         errors = HashMap<Int, String>()
+        times = ArrayList<Long>()
         index = 0
         sent = 0
         failed = 0
@@ -110,6 +114,7 @@ class SmsService : Service() {
             SmsJob.errors[i] = e.message ?: e.toString()
             SmsJob.results.setCharAt(i, 'F')
         }
+        if (i < SmsJob.times.size) SmsJob.times[i] = System.currentTimeMillis()
         SmsJob.index = i + 1
 
         if (SmsJob.index >= SmsJob.phones.size) {

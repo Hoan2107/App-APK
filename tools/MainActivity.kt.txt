@@ -88,6 +88,7 @@ class MainActivity : FlutterActivity() {
                                 SmsJob.message = message
                                 SmsJob.delayMs = delaySec * 1000L
                                 SmsJob.results = StringBuilder("P".repeat(SmsJob.phones.size))
+                                SmsJob.times = ArrayList<Long>(List(SmsJob.phones.size) { 0L })
                                 SmsJob.running = true
                                 try {
                                     launchService()
@@ -148,6 +149,7 @@ class MainActivity : FlutterActivity() {
                                 "index" to SmsJob.index,
                                 "nextAt" to SmsJob.nextAt,
                                 "results" to SmsJob.results.toString(),
+                                "times" to ArrayList<Long>(SmsJob.times),
                                 "errors" to errs
                             )
                         )

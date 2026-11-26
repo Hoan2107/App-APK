@@ -2,8 +2,6 @@ name: Build APK
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main, master]
 
 jobs:
   build:
@@ -21,17 +19,20 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Tạo khung Android
+      - name: Tao khung Android
         run: |
           flutter create --platforms=android --org vn.smsbulk --project-name sms_bulk /tmp/scaffold
+          rm -rf android
           cp -r /tmp/scaffold/android ./android
 
-      - name: Gắn quyền và code gửi SMS
+      - name: Va quyen, dich vu gui nen, icon
         run: python3 tools/patch_android.py
 
-      - run: flutter pub get
+      - name: Lay thu vien
+        run: flutter pub get
 
-      - run: flutter build apk --release
+      - name: Build APK
+        run: flutter build apk --release
 
       - uses: actions/upload-artifact@v4
         with:
