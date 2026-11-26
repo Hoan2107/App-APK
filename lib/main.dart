@@ -4,6 +4,7 @@ import 'pages/history_page.dart';
 import 'pages/home_page.dart';
 import 'pages/templates_page.dart';
 import 'store.dart';
+import 'theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,20 +17,12 @@ class SmsToolApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const seed = Color(0xFF00897B);
     return MaterialApp(
       title: 'SMS Tool',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.system,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: seed),
-        useMaterial3: true,
-      ),
-      darkTheme: ThemeData(
-        colorScheme:
-            ColorScheme.fromSeed(seedColor: seed, brightness: Brightness.dark),
-        useMaterial3: true,
-      ),
+      theme: appTheme(Brightness.light),
+      darkTheme: appTheme(Brightness.dark),
       home: const Shell(),
     );
   }
@@ -74,7 +67,7 @@ class _ShellState extends State<Shell> {
                 gradient: const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xFF00BFA5), Color(0xFF00695C)],
+                  colors: [kBrandLight, kBrandDark],
                 ),
                 borderRadius: BorderRadius.circular(20),
               ),

@@ -5,7 +5,9 @@ App chạy nền và tự gửi SMS, **cứ 15 giây gửi cho 1 người**, cho
 
 ## Cấu trúc app (3 trang, mở bằng nút menu ☰ góc trên trái)
 
-1. **Tổng quan & gửi tin**: nhập file Excel, xem nhóm nhà mạng, chọn mẫu, gửi tự động.
+1. **Tổng quan & gửi tin** (gọn trong 1 màn hình): phần trên là tiến độ, giữa là bảng người nhận (chỉ bảng này cuộn), dưới là tin nhắn và nút gửi.
+   - Chạm thanh tin nhắn ở dưới để chọn mẫu / soạn nội dung.
+   - Menu ⋮ góc trên phải: bỏ qua số đã gửi, bỏ danh sách, mẹo sử dụng.
 2. **Mẫu tin nhắn**: thêm / sửa / nhân bản / xoá mẫu, đặt tên cho từng mẫu (Mẫu 1, Mẫu 2...). Có thể gắn mỗi mẫu làm mặc định cho 1 nhà mạng.
 3. **Lịch sử gửi**:
    - *Theo ngày*: nhật ký từng tin (giờ gửi, tên, số, nhà mạng, mẫu đã dùng, thành công/lỗi), có tổng kết theo nhà mạng, chọn ngày bất kỳ.
@@ -33,7 +35,7 @@ Chọn chip nhóm ở trang Tổng quan để chỉ gửi cho nhóm đó (ví d�
 
 - Mọi danh sách, trạng thái từng người và giờ gửi được lưu trong máy.
 - Dừng giữa chừng rồi bấm **Tiếp tục**: chỉ gửi cho người chưa gửi. Dù đã tắt app, mở lại danh sách trong Lịch sử rồi bấm gửi, app chỉ gửi người còn "chờ".
-- Công tắc **Bỏ qua số đã gửi thành công trước đây** (mặc định bật): nhập file mới có người đã gửi ở file cũ sẽ tự bỏ qua.
+- Tuỳ chọn **Bỏ qua số đã gửi thành công trước đây** (mặc định bật): nhập file mới có người đã gửi ở file cũ sẽ tự bỏ qua.
 - Số bị lỗi có nút **Gửi lại số bị lỗi**.
 
 ## Tính năng
@@ -47,7 +49,7 @@ Chọn chip nhóm ở trang Tổng quan để chỉ gửi cho nhóm đó (ví d�
 
 ## Lấy file APK (không cần cài Flutter)
 
-1. Giải nén zip này, upload toàn bộ lên repo GitHub, ghi đè các file cũ (giữ nguyên thư mục `.github` và `tools/icons` đang có).
+1. Giải nén zip này, upload toàn bộ lên repo GitHub, ghi đè các file cũ (zip đã gồm `.github` và `tools/icons`).
 2. Tab **Actions** → **Build APK** → **Run workflow**. Đợi 5–8 phút.
 3. Tải `sms-bulk-apk` ở mục Artifacts, giải nén lấy `app-release.apk`, cài vào điện thoại.
 

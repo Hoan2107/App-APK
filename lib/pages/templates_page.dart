@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models.dart';
 import '../parsing.dart';
 import '../store.dart';
+import '../theme.dart';
 
 /// Trang quản lý các mẫu tin nhắn.
 class TemplatesPage extends StatelessWidget {
@@ -97,25 +98,28 @@ class TemplatesPage extends StatelessWidget {
             );
           }
           return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
             itemCount: list.length,
             itemBuilder: (context, i) {
               final t = list[i];
               final bound = carrierFromName(t.carrier);
               final selected = t.id == appState.selectedTplId;
               return Card(
-                margin: const EdgeInsets.only(bottom: 10),
+                margin: const EdgeInsets.only(bottom: 8),
                 elevation: 0,
-                color: selected
-                    ? cs.primaryContainer
-                    : cs.surfaceContainerHighest,
+                color: selected ? cs.primaryContainer : cs.surface,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20)),
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(
+                      color: selected
+                          ? cs.primary
+                          : cs.outlineVariant.withAlpha(130)),
+                ),
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(14),
                   onTap: () => _edit(context, t),
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
+                    padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -141,21 +145,7 @@ class TemplatesPage extends StatelessWidget {
                                     ?.copyWith(fontWeight: FontWeight.w700),
                               ),
                             ),
-                            if (bound != null)
-                              Container(
-                                margin: const EdgeInsets.only(right: 4),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: bound.color.withAlpha(30),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Text(bound.label,
-                                    style: TextStyle(
-                                        color: bound.color,
-                                        fontSize: 11.5,
-                                        fontWeight: FontWeight.w700)),
-                              ),
+                            if (bound != null) Pill(bound.label, bound.color),
                             PopupMenuButton<String>(
                               onSelected: (v) {
                                 if (v == 'edit') _edit(context, t);
@@ -176,7 +166,7 @@ class TemplatesPage extends StatelessWidget {
                           padding: const EdgeInsets.only(right: 8),
                           child: Text(
                             t.text,
-                            maxLines: 4,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -303,6 +293,7 @@ class _TemplateEditorPageState extends State<TemplateEditorPage> {
         actions: [
           TextButton.icon(
             onPressed: _save,
+            style: TextButton.styleFrom(foregroundColor: Colors.white),
             icon: const Icon(Icons.check_rounded),
             label: const Text('Lưu'),
           ),

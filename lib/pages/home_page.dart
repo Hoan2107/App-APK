@@ -2,10 +2,12 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models.dart';
 import '../parsing.dart';
 import '../store.dart';
+import '../theme.dart';
 import 'templates_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -417,6 +419,8 @@ class _HomePageState extends State<HomePage> {
     return '${m ~/ 60} giờ ${m % 60} phút';
   }
 
+  /// Bố cục 1 màn hình: tổng quan (trên) · danh sách (giữa, cuộn) · tin nhắn
+  /// và nút gửi (dưới). Khi màn hình thấp (bàn phím mở, xoay ngang) tự thu gọn.
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -426,10 +430,10 @@ class _HomePageState extends State<HomePage> {
         final b = s.current;
         final visible = <int>[];
         if (b != null) {
+          final q = _qc.text.trim().toLowerCase();
           for (var i = 0; i < b.contacts.length; i++) {
             final c = b.contacts[i];
             if (s.group != null && c.carrier != s.group) continue;
-            final q = _qc.text.trim().toLowerCase();
             if (_search &&
                 q.isNotEmpty &&
                 !c.name.toLowerCase().contains(q) &&
@@ -439,31 +443,64 @@ class _HomePageState extends State<HomePage> {
             visible.add(i);
           }
         }
-        return Scaffold(
-          body: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(child: _header(context, b)),
-              SliverToBoxAdapter(child: _listCard(cs, b)),
-              SliverToBoxAdapter(child: _messageCard(cs)),
-              if (b != null && visible.isNotEmpty)
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                  sliver: SliverList.builder(
-                    itemCount: visible.length,
-                    itemBuilder: (context, k) => _tile(cs, b, visible[k]),
-                  ),
-                ),
-              SliverToBoxAdapter(child: _tips(cs)),
-              const SliverToBoxAdapter(child: SizedBox(height: 24)),
-            ],
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: SystemUiOverlayStyle.light,
+          child: Scaffold(
+            body: LayoutBuilder(
+              builder: (context, box) {
+                final compact = box.maxHeight < 560;
+                final tiny = box.maxHeight < 380;
+                // Các key giữ ô tìm kiếm không bị mất con trỏ khi bố cục đổi.
+                return Column(
+                  children: [
+                    KeyedSubtree(
+                      key: const ValueKey('header'),
+                      child: _header(context, b, compact),
+                    ),
+                    if (b != null && !compact)
+                      KeyedSubtree(
+                        key: const ValueKey('file'),
+                        child: _fileBar(cs, b),
+                      ),
+                    if (b != null && !tiny)
+                      KeyedSubtree(
+                        key: const ValueKey('groups'),
+                        child: _groupBar(cs, b, compact),
+                      ),
+                    if (b != null)
+                      KeyedSubtree(
+                        key: const ValueKey('tools'),
+                        child: _toolBar(cs, b),
+                      ),
+                    if (b != null && _search)
+                      KeyedSubtree(
+                        key: const ValueKey('search'),
+                        child: _searchField(cs),
+                      ),
+                    Expanded(
+                      key: const ValueKey('list'),
+                      child: b == null
+                          ? _emptyState(cs)
+                          : _contactList(cs, b, visible),
+                    ),
+                    if (!tiny)
+                      KeyedSubtree(
+                        key: const ValueKey('bottom'),
+                        child: _bottomBar(cs, b, compact),
+                      ),
+                  ],
+                );
+              },
+            ),
           ),
-          bottomNavigationBar: _bottomBar(cs, b),
         );
       },
     );
   }
 
-  Widget _header(BuildContext context, Batch? b) {
+  // ----- phần tổng quan ------------------------------------------------------------
+
+  Widget _header(BuildContext context, Batch? b, bool compact) {
     final top = MediaQuery.of(context).padding.top;
 
     int total = 0, sentC = 0, failedC = 0, remaining = 0;
@@ -471,7 +508,7 @@ class _HomePageState extends State<HomePage> {
       total = s.total;
       sentC = s.sentN;
       failedC = s.failedN;
-      remaining = (s.total - s.index).clamp(0, s.total);
+      remaining = (s.total - s.index).clamp(0, s.total).toInt();
     } else if (b != null) {
       final g = s.group;
       sentC = b.sent(g);
@@ -495,20 +532,16 @@ class _HomePageState extends State<HomePage> {
     }
 
     return Container(
-      padding: EdgeInsets.fromLTRB(8, top + 8, 20, 22),
+      padding: EdgeInsets.fromLTRB(4, top, 4, compact ? 4 : 10),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF00BFA5), Color(0xFF00695C)],
+          colors: [kBrand, kBrandDark],
         ),
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(28),
-          bottomRight: Radius.circular(28),
-        ),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(18)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
@@ -518,24 +551,18 @@ class _HomePageState extends State<HomePage> {
                 tooltip: 'Menu',
               ),
               const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('SMS Tool',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800)),
-                    Text('Tự động gửi mỗi $kDelaySeconds giây / 1 người',
-                        style: TextStyle(color: Colors.white70, fontSize: 12.5)),
-                  ],
-                ),
+                child: Text('SMS Tool',
+                    maxLines: 1,
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800)),
               ),
               Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: s.running ? Colors.white : Colors.white.withAlpha(50),
+                  color: s.running ? Colors.white : Colors.white.withAlpha(45),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -543,112 +570,124 @@ class _HomePageState extends State<HomePage> {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
-                    color: s.running ? const Color(0xFF00695C) : Colors.white,
+                    color: s.running ? kBrandDark : Colors.white,
                   ),
                 ),
               ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
+                onSelected: (v) {
+                  if (v == 'skip') s.setSkipSent(!s.skipSent);
+                  if (v == 'close') _clearAll();
+                  if (v == 'tips') _showTips();
+                },
+                itemBuilder: (_) => [
+                  CheckedPopupMenuItem<String>(
+                    value: 'skip',
+                    checked: s.skipSent,
+                    enabled: !s.jobActive,
+                    child: const Text('Bỏ qua số đã gửi trước đây'),
+                  ),
+                  if (b != null && !s.running)
+                    const PopupMenuItem<String>(
+                        value: 'close', child: Text('Bỏ danh sách này')),
+                  const PopupMenuItem<String>(
+                      value: 'tips', child: Text('Mẹo sử dụng')),
+                ],
+              ),
             ],
           ),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.only(left: 12),
-            child: Container(
-              padding: const EdgeInsets.all(16),
+          if (!compact && b != null)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 8),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.white.withAlpha(36),
-                borderRadius: BorderRadius.circular(22),
+                color: Colors.white.withAlpha(30),
+                borderRadius: BorderRadius.circular(14),
               ),
               child: Column(
                 children: [
                   Row(
                     children: [
                       SizedBox(
-                        width: 88,
-                        height: 88,
+                        width: 50,
+                        height: 50,
                         child: Stack(
                           alignment: Alignment.center,
                           children: [
                             Positioned.fill(
                               child: CircularProgressIndicator(
                                 value: progress,
-                                strokeWidth: 9,
+                                strokeWidth: 5,
                                 backgroundColor: Colors.white.withAlpha(60),
                                 color: Colors.white,
-                                strokeCap: StrokeCap.round,
                               ),
                             ),
                             Text(
                               '${(progress * 100).round()}%',
                               style: const TextStyle(
                                   color: Colors.white,
-                                  fontSize: 20,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w800),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: [
-                            _stat(Icons.check_circle_rounded, 'Đã gửi', sentC),
-                            _stat(Icons.error_rounded, 'Lỗi', failedC),
-                            _stat(Icons.hourglass_bottom_rounded, 'Còn lại',
-                                remaining),
-                          ],
-                        ),
-                      ),
+                      const SizedBox(width: 6),
+                      _stat('Đã gửi', sentC),
+                      _stat('Lỗi', failedC),
+                      _stat('Còn lại', remaining),
                     ],
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 8),
                   _live(b, remaining),
                 ],
               ),
             ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _stat(IconData icon, String label, int value) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: Colors.white, size: 20),
-        const SizedBox(height: 4),
-        Text('$value',
-            style: const TextStyle(
-                color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-      ],
+  Widget _stat(String label, int value) {
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('$value',
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 21,
+                  fontWeight: FontWeight.w800)),
+          Text(label,
+              style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        ],
+      ),
     );
   }
 
   Widget _liveRow(IconData icon, String text) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: Colors.white),
-        const SizedBox(width: 8),
+        Icon(icon, size: 16, color: Colors.white),
+        const SizedBox(width: 6),
         Expanded(
           child: Text(
             text,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white, fontSize: 13.5),
+            style: const TextStyle(color: Colors.white, fontSize: 12.5),
           ),
         ),
       ],
     );
   }
 
-  Widget _live(Batch? b, int remaining) {
+  Widget _live(Batch b, int remaining) {
     final lines = <Widget>[];
-    const style = TextStyle(color: Colors.white, fontSize: 13.5);
 
     Contact? at(int pos) {
-      if (b == null || pos < 0 || pos >= s.jobIdx.length) return null;
+      if (pos < 0 || pos >= s.jobIdx.length) return null;
       final ci = s.jobIdx[pos];
       return ci < b.contacts.length ? b.contacts[ci] : null;
     }
@@ -668,315 +707,250 @@ class _HomePageState extends State<HomePage> {
     if (next != null) {
       final sec = s.secondsLeft;
       final frac = (1 - sec / kDelaySeconds).clamp(0.0, 1.0).toDouble();
-      if (lines.isNotEmpty) lines.add(const SizedBox(height: 8));
       lines.add(_liveRow(
           Icons.schedule_rounded, 'Tiếp theo (sau ${sec}s): ${_label(next)}'));
-      lines.add(const SizedBox(height: 10));
+      lines.add(const SizedBox(height: 6));
       lines.add(ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: LinearProgressIndicator(
           value: frac,
-          minHeight: 6,
+          minHeight: 4,
           backgroundColor: Colors.white24,
           color: Colors.white,
         ),
       ));
-      lines.add(const SizedBox(height: 8));
+      lines.add(const SizedBox(height: 4));
       lines.add(Text('Ước tính xong sau ${_eta(remaining)}',
-          style: const TextStyle(color: Colors.white70, fontSize: 12)));
+          style: const TextStyle(color: Colors.white70, fontSize: 11.5)));
     } else if (s.jobFinished) {
-      lines.add(const SizedBox(height: 4));
-      lines.add(const Text('Đã gửi xong phiên này.', style: style));
+      lines.add(_liveRow(Icons.done_all_rounded, 'Đã gửi xong phiên này.'));
     } else if (s.jobActive) {
-      lines.add(const SizedBox(height: 4));
-      lines.add(Text(
-          'Đã dừng ở người thứ ${s.index}/${s.total}. Bấm "Tiếp tục" để gửi tiếp.',
-          style: style));
+      lines.add(_liveRow(Icons.pause_circle_rounded,
+          'Đã dừng ở ${s.index}/${s.total}. Bấm "Tiếp tục" để gửi tiếp.'));
     } else {
-      lines.add(Text(
-        b == null
-            ? 'Chọn file Excel hoặc nhập tay để bắt đầu.'
-            : (remaining == 0
-                ? 'Không còn người chờ gửi ở nhóm này.'
-                : 'Sẵn sàng. Chọn nhóm + mẫu tin rồi bấm nút bên dưới.'),
-        style: style,
+      lines.add(_liveRow(
+        Icons.info_outline_rounded,
+        remaining == 0
+            ? 'Không còn người chờ gửi ở nhóm này.'
+            : 'Sẵn sàng. Chọn nhóm, mẫu tin rồi bấm Gửi.',
       ));
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: lines);
   }
 
-  // ----- thẻ danh sách + nhóm nhà mạng -------------------------------------------
+  void _showTips() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Mẹo sử dụng'),
+        content: const Text(
+          'Để app chạy ổn định khi tắt màn hình, vào Cài đặt > Ứng dụng > '
+          'SMS Tool > Tiết kiệm pin và chọn "Không hạn chế".\n\n'
+          '"Đã gửi" nghĩa là máy đã chuyển tin cho nhà mạng.\n\n'
+          '"Bỏ qua số đã gửi trước đây" giúp tránh gửi lặp khi nhập lại file cũ.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Đã hiểu')),
+        ],
+      ),
+    );
+  }
 
-  Widget _listCard(ColorScheme cs, Batch? b) {
-    final busy = s.jobActive;
-    return Card(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      elevation: 0,
-      color: cs.surfaceContainerHighest,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+  // ----- thanh file, nhóm nhà mạng, công cụ ----------------------------------------
+
+  Widget _fileBar(ColorScheme cs, Batch b) {
+    final locked = s.running || s.jobActive;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.fromLTRB(10, 4, 4, 4),
+      decoration: boxDecoration(cs),
+      child: Row(
+        children: [
+          Icon(Icons.description_rounded, color: cs.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.groups_rounded, color: cs.primary),
-                const SizedBox(width: 8),
+                Text(b.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                Text('${b.total()} người · ${fmtDateTime(b.createdAt)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: cs.outline, fontSize: 11.5)),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Nhập tay',
+            onPressed: locked ? null : _manualInput,
+            icon: const Icon(Icons.person_add_alt_1_rounded),
+          ),
+          FilledButton.tonalIcon(
+            onPressed: locked ? null : _pickFile,
+            icon: const Icon(Icons.upload_file_rounded, size: 18),
+            label: const Text('Chọn file'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _groupChip(
+      ColorScheme cs, String label, Color color, Carrier? value) {
+    final selected = s.group == value;
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        showCheckmark: false,
+        visualDensity: VisualDensity.compact,
+        backgroundColor: cs.surface,
+        selectedColor: color.withAlpha(45),
+        side: BorderSide(color: selected ? color : cs.outlineVariant),
+        labelStyle: TextStyle(
+            color: selected ? cs.onSurface : cs.onSurfaceVariant,
+            fontWeight: selected ? FontWeight.w800 : FontWeight.w500),
+        onSelected: (_) => s.selectGroup(value),
+      ),
+    );
+  }
+
+  Widget _groupBar(ColorScheme cs, Batch b, bool compact) {
+    final failed = b.failed(s.group);
+    final skipped = b.skipped(s.group);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(12, 4, 6, 0),
+          child: Row(
+            children: [
+              _groupChip(cs, 'Tất cả · ${b.total()}', cs.primary, null),
+              for (final c in Carrier.values)
+                if (b.total(c) > 0)
+                  _groupChip(cs, '${c.label} · ${b.total(c)}', c.color, c),
+            ],
+          ),
+        ),
+        if (!compact)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              children: [
                 Expanded(
                   child: Text(
-                    b == null
-                        ? 'Danh sách người nhận'
-                        : 'Người nhận (${b.total()})',
-                    style: Theme.of(context).textTheme.titleMedium,
+                    'Đã gửi ${b.sent(s.group)} · lỗi $failed · '
+                    'chờ ${b.pending(s.group)}'
+                    '${skipped > 0 ? " · bỏ qua $skipped" : ""}',
+                    style: TextStyle(color: cs.outline, fontSize: 12),
                   ),
                 ),
-                if (b != null && !s.running)
+                if (failed > 0 && !s.running && !s.jobActive)
                   TextButton.icon(
-                    onPressed: _clearAll,
-                    icon: const Icon(Icons.close_rounded, size: 18),
-                    label: const Text('Bỏ'),
-                  ),
-              ],
-            ),
-            if (b != null)
-              Padding(
-                padding: const EdgeInsets.only(left: 32, bottom: 4),
-                child: Text(
-                  'File: ${b.name} · nhập lúc ${fmtDateTime(b.createdAt)}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.tonalIcon(
-                    onPressed: (s.running || busy) ? null : _pickFile,
-                    icon: const Icon(Icons.upload_file_rounded),
-                    label: const Text('Chọn file Excel'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: (s.running || busy) ? null : _manualInput,
-                    icon: const Icon(Icons.keyboard_alt_outlined),
-                    label: const Text('Nhập tay'),
-                  ),
-                ),
-              ],
-            ),
-            if (b == null)
-              Padding(
-                padding: const EdgeInsets.only(top: 14),
-                child: Text(
-                  'File Excel cần có cột tên và cột số điện thoại, app tự nhận '
-                  'diện cột và tự phân nhóm theo nhà mạng (Viettel, VinaPhone, '
-                  'MobiFone...). Số bị mất số 0 đầu vẫn được nhận.',
-                  style: TextStyle(color: cs.outline, fontSize: 12.5),
-                ),
-              )
-            else ...[
-              const SizedBox(height: 14),
-              Text('Chọn nhóm để gửi',
-                  style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 6),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    ChoiceChip(
-                      label: Text('Tất cả · ${b.total()}'),
-                      selected: s.group == null,
-                      onSelected: (_) => s.selectGroup(null),
-                    ),
-                    for (final c in Carrier.values)
-                      if (b.total(c) > 0)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 8),
-                          child: ChoiceChip(
-                            avatar: Icon(Icons.circle, size: 10, color: c.color),
-                            label: Text('${c.label} · ${b.total(c)}'),
-                            selected: s.group == c,
-                            onSelected: (_) => s.selectGroup(c),
-                          ),
-                        ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Nhóm ${s.group?.label ?? "tất cả"}: '
-                'đã gửi ${b.sent(s.group)} · lỗi ${b.failed(s.group)} · '
-                'chờ ${b.pending(s.group)}'
-                '${b.skipped(s.group) > 0 ? " · bỏ qua ${b.skipped(s.group)} (đã gửi trước đó)" : ""}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              Row(
-                children: [
-                  Checkbox(
-                    value: s.allSelected,
-                    onChanged: (s.running || busy)
-                        ? null
-                        : (v) => s.setSelAll(v ?? false),
-                  ),
-                  const Text('Chọn tất cả'),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: 'Tìm kiếm',
-                    icon: Icon(
-                        _search ? Icons.search_off_rounded : Icons.search_rounded),
-                    onPressed: () => setState(() {
-                      _search = !_search;
-                      if (!_search) _qc.clear();
-                    }),
-                  ),
-                  OutlinedButton(
-                    onPressed: (s.running || busy) ? null : _deleteGroup,
-                    style: OutlinedButton.styleFrom(foregroundColor: cs.error),
-                    child: const Text('Xóa tất cả'),
-                  ),
-                ],
-              ),
-              if (_search)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: TextField(
-                    controller: _qc,
-                    onChanged: (_) => setState(() {}),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      filled: true,
-                      fillColor: cs.surface,
-                      prefixIcon: const Icon(Icons.search_rounded),
-                      hintText: 'Tìm theo tên hoặc số điện thoại',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                title: const Text('Bỏ qua số đã gửi thành công trước đây'),
-                subtitle: const Text('Tránh gửi lặp khi nhập lại file cũ'),
-                value: s.skipSent,
-                onChanged: busy ? null : (v) => s.setSkipSent(v),
-              ),
-              if (b.failed(s.group) > 0 && !s.running && !busy)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
                     onPressed: _retryFailed,
-                    icon: const Icon(Icons.refresh_rounded, size: 18),
-                    label: Text('Gửi lại ${b.failed(s.group)} số bị lỗi'),
+                    style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact),
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: Text('Gửi lại $failed số lỗi'),
                   ),
-                ),
-            ],
-          ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _toolBar(ColorScheme cs, Batch b) {
+    final locked = s.running || s.jobActive;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 12, 0),
+      child: Row(
+        children: [
+          Checkbox(
+            value: s.allSelected,
+            onChanged: locked ? null : (v) => s.setSelAll(v ?? false),
+          ),
+          const Expanded(
+            child: Text('Chọn tất cả',
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+          IconButton(
+            tooltip: 'Tìm kiếm',
+            visualDensity: VisualDensity.compact,
+            icon: Icon(
+                _search ? Icons.search_off_rounded : Icons.search_rounded),
+            onPressed: () => setState(() {
+              _search = !_search;
+              if (!_search) _qc.clear();
+            }),
+          ),
+          TextButton.icon(
+            onPressed: locked ? null : _deleteGroup,
+            style: TextButton.styleFrom(foregroundColor: cs.error),
+            icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+            label: const Text('Xóa tất cả'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _searchField(ColorScheme cs) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+      child: TextField(
+        controller: _qc,
+        autofocus: true,
+        onChanged: (_) => setState(() {}),
+        decoration: InputDecoration(
+          isDense: true,
+          filled: true,
+          fillColor: cs.surface,
+          prefixIcon: const Icon(Icons.search_rounded),
+          hintText: 'Tìm theo tên hoặc số điện thoại',
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );
   }
 
-  // ----- thẻ nội dung tin nhắn ----------------------------------------------------
+  // ----- bảng người nhận -----------------------------------------------------------
 
-  Widget _messageCard(ColorScheme cs) {
-    final text = s.msgCtrl.text;
-    final t = s.selectedTemplate;
-    final edited = t != null && t.text != text;
-    return Card(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      elevation: 0,
-      color: cs.surfaceContainerHighest,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
+  Widget _emptyState(ColorScheme cs) {
+    final locked = s.running || s.jobActive;
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(Icons.edit_note_rounded, color: cs.primary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text('Nội dung tin nhắn',
-                      style: Theme.of(context).textTheme.titleMedium),
-                ),
-                ActionChip(
-                  avatar: const Icon(Icons.person_add_alt_1_rounded, size: 16),
-                  label: const Text('Chèn {ten}'),
-                  onPressed: s.running ? null : _insertName,
-                ),
-              ],
-            ),
+            Icon(Icons.groups_rounded, size: 56, color: cs.primary),
             const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.tonalIcon(
-                    onPressed: s.running ? null : _pickTemplate,
-                    icon: const Icon(Icons.article_outlined),
-                    label: Text(
-                      t == null ? 'Chọn mẫu tin' : t.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                OutlinedButton.icon(
-                  onPressed: s.running || text.trim().isEmpty
-                      ? null
-                      : () => _saveAsTemplate(),
-                  icon: const Icon(Icons.bookmark_add_outlined, size: 18),
-                  label: const Text('Lưu mẫu'),
-                ),
-              ],
+            Text('Chưa có danh sách người nhận',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 6),
+            Text(
+              'File Excel cần có cột tên và cột số điện thoại, app tự nhận diện '
+              'cột và phân nhóm theo nhà mạng. Số mất số 0 đầu vẫn được nhận.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: cs.outline, fontSize: 12.5),
             ),
-            if (edited && !s.running)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Đã chỉnh sửa so với mẫu "${t!.name}" (chỉ áp dụng cho '
-                        'lần gửi này).',
-                        style: TextStyle(color: cs.tertiary, fontSize: 12),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => _updateTemplate(t!),
-                      child: const Text('Cập nhật mẫu'),
-                    ),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: s.msgCtrl,
-              enabled: !s.running,
-              minLines: 4,
-              maxLines: 8,
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: cs.surface,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide.none,
-                ),
-                hintText: 'Chọn một mẫu ở trên, hoặc gõ nội dung tin nhắn vào đây...',
-              ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: locked ? null : _pickFile,
+              icon: const Icon(Icons.upload_file_rounded),
+              label: const Text('Chọn file Excel'),
             ),
             const SizedBox(height: 8),
-            Text(
-              '${text.runes.length} ký tự · ~${smsSegments(text)} SMS / người'
-              '  ·  {ten} sẽ được thay bằng tên từng người',
-              style: Theme.of(context).textTheme.bodySmall,
+            OutlinedButton.icon(
+              onPressed: locked ? null : _manualInput,
+              icon: const Icon(Icons.keyboard_alt_outlined),
+              label: const Text('Nhập tay'),
             ),
           ],
         ),
@@ -984,7 +958,55 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _tile(ColorScheme cs, Batch b, int i) {
+  Widget _contactList(ColorScheme cs, Batch b, List<int> visible) {
+    final head = TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w800,
+        color: cs.onSecondaryContainer);
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      clipBehavior: Clip.antiAlias,
+      decoration: boxDecoration(cs),
+      child: Column(
+        children: [
+          Container(
+            color: cs.secondaryContainer,
+            padding: const EdgeInsets.fromLTRB(10, 6, 0, 6),
+            child: Row(
+              children: [
+                Expanded(flex: 11, child: Text('TÊN KHÁCH HÀNG', style: head)),
+                Expanded(flex: 9, child: Text('SỐ ĐIỆN THOẠI', style: head)),
+                SizedBox(
+                    width: 40,
+                    child: Center(child: Text('CHỌN', style: head))),
+                SizedBox(
+                    width: 40, child: Center(child: Text('XÓA', style: head))),
+              ],
+            ),
+          ),
+          Expanded(
+            child: visible.isEmpty
+                ? Center(
+                    child: Text('Không có người nào phù hợp.',
+                        style: TextStyle(color: cs.outline)),
+                  )
+                : Material(
+                    type: MaterialType.transparency,
+                    child: ListView.separated(
+                      padding: EdgeInsets.zero,
+                      itemCount: visible.length,
+                      separatorBuilder: (_, __) => Divider(
+                          height: 1, color: cs.outlineVariant.withAlpha(110)),
+                      itemBuilder: (context, k) => _row(cs, b, visible[k]),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(ColorScheme cs, Batch b, int i) {
     final c = b.contacts[i];
     final st = c.status;
     final isNext = s.running &&
@@ -992,78 +1014,257 @@ class _HomePageState extends State<HomePage> {
         s.index < s.jobIdx.length &&
         s.jobIdx[s.index] == i;
 
-    Widget trailing;
+    Widget mark;
     if (st == 'S') {
-      trailing = const Icon(Icons.check_circle_rounded, color: Colors.green);
+      mark = Icon(Icons.check_circle_rounded, color: okColor(context));
     } else if (st == 'F') {
-      trailing = Icon(Icons.error_rounded, color: cs.error);
+      mark = Icon(Icons.error_rounded, color: cs.error);
     } else if (st == 'K') {
-      trailing = Icon(Icons.history_toggle_off_rounded, color: cs.outline);
+      mark = Icon(Icons.history_toggle_off_rounded, color: cs.outline);
     } else if (isNext) {
-      trailing = Icon(Icons.hourglass_top_rounded, color: cs.primary);
+      mark = Icon(Icons.hourglass_top_rounded, color: cs.primary);
     } else {
-      trailing = Checkbox(
+      mark = Checkbox(
         value: c.sel,
+        visualDensity: VisualDensity.compact,
         onChanged: s.running ? null : (v) => s.toggleSel(c, v ?? false),
       );
     }
-    trailing = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        trailing,
-        IconButton(
-          tooltip: 'Xóa',
-          icon: Icon(Icons.delete_rounded, color: cs.error),
-          onPressed: s.running ? null : () => _deleteOne(c),
-        ),
-      ],
-    );
 
-    final title = c.name.isEmpty ? c.phone : c.name;
     final car = c.carrier;
-    String sub = '${c.phone} · ${car.label}';
+    var sub = car.label;
     if (st == 'S' && c.sentAt > 0) sub += ' · ${fmtTime(c.sentAt)}';
     if (st == 'F') sub += ' · ${c.error.isEmpty ? "lỗi" : c.error}';
     if (st == 'K') sub += ' · đã gửi trước đó';
-    final initial = String.fromCharCode(title.runes.first).toUpperCase();
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      elevation: 0,
-      color: isNext ? cs.primaryContainer : cs.surfaceContainerHighest,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: car.color.withAlpha(40),
-          foregroundColor: car.color,
-          child: c.name.isEmpty
-              ? const Icon(Icons.person_rounded)
-              : Text(initial,
-                  style: const TextStyle(fontWeight: FontWeight.w700)),
+    return Container(
+      color: isNext ? cs.primaryContainer : null,
+      constraints: const BoxConstraints(minHeight: 48),
+      padding: const EdgeInsets.fromLTRB(10, 3, 0, 3),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 11,
+            child: Text(
+              c.name.isEmpty ? '(không tên)' : c.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: 13.5,
+                  color: c.name.isEmpty ? cs.outline : cs.onSurface),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            flex: 9,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(c.phone,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w700)),
+                Row(
+                  children: [
+                    Icon(Icons.circle, size: 7, color: car.color),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        sub,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: st == 'F' ? cs.error : cs.outline),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: 40, child: Center(child: mark)),
+          SizedBox(
+            width: 40,
+            child: IconButton(
+              tooltip: 'Xóa',
+              padding: EdgeInsets.zero,
+              icon: Icon(Icons.delete_outline_rounded,
+                  size: 21, color: s.running ? cs.outlineVariant : cs.error),
+              onPressed: s.running ? null : () => _deleteOne(c),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ----- tin nhắn ------------------------------------------------------------------
+
+  /// Bảng soạn tin nhắn mở từ dưới lên.
+  Future<void> _openMessage() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (ctx) => Padding(
+        padding:
+            EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: ListenableBuilder(
+          listenable: s,
+          builder: (ctx, _) => SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: _messageEditor(ctx),
+          ),
         ),
-        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis),
-        trailing: trailing,
       ),
     );
   }
 
-  Widget _tips(ColorScheme cs) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-      child: Text(
-        'Mẹo: để app chạy ổn định khi tắt màn hình, vào Cài đặt > Ứng dụng > '
-        'SMS Tool > Tiết kiệm pin và chọn "Không hạn chế". '
-        '"Đã gửi" nghĩa là máy đã chuyển tin cho nhà mạng.',
-        style:
-            Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.outline),
+  Widget _messageEditor(BuildContext ctx) {
+    final cs = Theme.of(ctx).colorScheme;
+    final text = s.msgCtrl.text;
+    final t = s.selectedTemplate;
+    final edited = t != null && t.text != text;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text('Nội dung tin nhắn',
+                  style: Theme.of(ctx).textTheme.titleMedium),
+            ),
+            ActionChip(
+              avatar: const Icon(Icons.person_add_alt_1_rounded, size: 16),
+              label: const Text('Chèn {ten}'),
+              onPressed: s.running ? null : _insertName,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.tonalIcon(
+                onPressed: s.running ? null : _pickTemplate,
+                icon: const Icon(Icons.article_outlined),
+                label: Text(
+                  t == null ? 'Chọn mẫu tin' : t.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            OutlinedButton.icon(
+              onPressed: s.running || text.trim().isEmpty
+                  ? null
+                  : () => _saveAsTemplate(),
+              icon: const Icon(Icons.bookmark_add_outlined, size: 18),
+              label: const Text('Lưu mẫu'),
+            ),
+          ],
+        ),
+        if (edited && !s.running)
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Đã chỉnh so với mẫu "${t!.name}" (chỉ áp dụng lần này).',
+                  style: TextStyle(color: cs.tertiary, fontSize: 12),
+                ),
+              ),
+              TextButton(
+                onPressed: () => _updateTemplate(t!),
+                child: const Text('Cập nhật mẫu'),
+              ),
+            ],
+          ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: s.msgCtrl,
+          enabled: !s.running,
+          minLines: 4,
+          maxLines: 8,
+          decoration: InputDecoration(
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            hintText: 'Chọn một mẫu ở trên, hoặc gõ nội dung tin nhắn vào đây...',
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '${text.runes.length} ký tự · ~${smsSegments(text)} SMS / người'
+          '  ·  {ten} sẽ được thay bằng tên từng người',
+          style: Theme.of(ctx).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Xong'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Dòng xem trước tin nhắn, chạm để soạn / đổi mẫu.
+  Widget _messageBar(ColorScheme cs) {
+    final text = s.msgCtrl.text;
+    final t = s.selectedTemplate;
+    final title = t == null
+        ? 'Tin nhắn tự soạn'
+        : '${t.name}${t.text != text ? " (đã chỉnh)" : ""}';
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: _openMessage,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+        decoration:
+            boxDecoration(cs, color: cs.secondaryContainer.withAlpha(110)),
+        child: Row(
+          children: [
+            Icon(Icons.edit_note_rounded, color: cs.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$title · ${text.runes.length} ký tự · '
+                    '~${smsSegments(text)} SMS',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w700),
+                  ),
+                  Text(
+                    text.trim().isEmpty
+                        ? 'Chạm để chọn mẫu hoặc soạn nội dung'
+                        : text.replaceAll('\n', ' '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.keyboard_arrow_up_rounded),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _bottomBar(ColorScheme cs, Batch? b) {
+  Widget _bottomBar(ColorScheme cs, Batch? b, bool compact) {
     Widget content;
-    const minSize = Size.fromHeight(54);
+    const minSize = Size.fromHeight(48);
 
     if (s.running) {
       content = FilledButton.icon(
@@ -1113,13 +1314,32 @@ class _HomePageState extends State<HomePage> {
     }
 
     return Material(
-      elevation: 12,
+      elevation: 10,
       color: cs.surface,
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-          child: content,
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!compact) ...[
+                _messageBar(cs),
+                const SizedBox(height: 8),
+                content,
+              ] else
+                Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Nội dung tin nhắn',
+                      onPressed: _openMessage,
+                      icon: const Icon(Icons.edit_note_rounded),
+                    ),
+                    Expanded(child: content),
+                  ],
+                ),
+            ],
+          ),
         ),
       ),
     );

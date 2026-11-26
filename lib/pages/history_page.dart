@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models.dart';
 import '../store.dart';
+import '../theme.dart';
 
 /// Lịch sử gửi: tab "Theo ngày" (nhật ký từng tin) và tab "Danh sách" (các file đã nhập).
 class HistoryPage extends StatefulWidget {
@@ -15,6 +16,9 @@ class HistoryPage extends StatefulWidget {
 
 class _HistoryPageState extends State<HistoryPage> {
   DateTime _day = DateTime.now();
+
+  /// false = xem theo phiên gửi, true = xem từng tin.
+  bool _byMessage = false;
 
   void _snack(String t) {
     if (!mounted) return;
@@ -36,6 +40,10 @@ class _HistoryPageState extends State<HistoryPage> {
           ),
           title: const Text('Lịch sử gửi'),
           bottom: const TabBar(
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            indicatorColor: Colors.white,
+            dividerColor: Colors.transparent,
             tabs: [
               Tab(text: 'Theo ngày'),
               Tab(text: 'Danh sách đã nhập'),
@@ -91,167 +99,188 @@ class _HistoryPageState extends State<HistoryPage> {
       perCarrier[e.contact.carrier] = (perCarrier[e.contact.carrier] ?? 0) + 1;
     }
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-          child: Row(
-            children: [
-              IconButton(
-                onPressed: () => _shift(-1),
-                icon: const Icon(Icons.chevron_left_rounded),
-                tooltip: 'Ngày trước',
-              ),
-              Expanded(
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(14),
-                  onTap: _pickDay,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Column(
+    return CustomScrollView(
+      key: const PageStorageKey('day'),
+      slivers: [
+        SliverToBoxAdapter(
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            decoration: boxDecoration(cs),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => _shift(-1),
+                      icon: const Icon(Icons.chevron_left_rounded),
+                      tooltip: 'Ngày trước',
+                    ),
+                    Expanded(
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: _pickDay,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.calendar_month_rounded,
+                                  size: 18, color: cs.primary),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  '${dayTitle(_day)} · ${fmtDate(_day)}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: isToday ? null : () => _shift(1),
+                      icon: const Icon(Icons.chevron_right_rounded),
+                      tooltip: 'Ngày sau',
+                    ),
+                  ],
+                ),
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      _num(context, 'Tổng', logs.length, cs.primary),
+                      _num(context, 'Thành công', ok, okColor(context)),
+                      _num(context, 'Lỗi', bad, cs.error),
+                    ],
+                  ),
+                ),
+                if (perCarrier.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
                       children: [
-                        Text(dayTitle(_day),
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w800)),
-                        Text('${fmtDate(_day)} · chạm để chọn ngày',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: cs.outline)),
+                        for (final c in Carrier.values)
+                          if ((perCarrier[c] ?? 0) > 0)
+                            Pill('${c.label}: ${perCarrier[c]}', c.color),
                       ],
                     ),
                   ),
-                ),
-              ),
-              IconButton(
-                onPressed: isToday ? null : () => _shift(1),
-                icon: const Icon(Icons.chevron_right_rounded),
-                tooltip: 'Ngày sau',
-              ),
-            ],
-          ),
-        ),
-        Card(
-          margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          elevation: 0,
-          color: cs.primaryContainer,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _num(context, 'Tổng', logs.length, cs.onPrimaryContainer),
-                    _num(context, 'Thành công', ok, Colors.green.shade700),
-                    _num(context, 'Lỗi', bad, cs.error),
-                  ],
-                ),
-                if (perCarrier.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      for (final c in Carrier.values)
-                        if ((perCarrier[c] ?? 0) > 0)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: c.color.withAlpha(30),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text('${c.label}: ${perCarrier[c]}',
-                                style: TextStyle(
-                                    color: c.color,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700)),
-                          ),
-                    ],
-                  ),
-                ],
               ],
             ),
           ),
         ),
-        if (sessions.isNotEmpty)
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 250),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+            child: SegmentedButton<bool>(
+              showSelectedIcon: false,
+              segments: [
+                ButtonSegment(
+                    value: false, label: Text('Phiên gửi (${sessions.length})')),
+                ButtonSegment(
+                    value: true, label: Text('Từng tin (${logs.length})')),
+              ],
+              selected: {_byMessage},
+              onSelectionChanged: (v) => setState(() => _byMessage = v.first),
+            ),
+          ),
+        ),
+        if (_byMessage ? logs.isEmpty : sessions.isEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Text(
+                !_byMessage && logs.isNotEmpty
+                    ? 'Không có thẻ phiên gửi. Xem ở mục "Từng tin".'
+                    : (isToday
+                        ? 'Hôm nay chưa gửi tin nào.'
+                        : 'Ngày này không có tin nào được gửi.'),
+                textAlign: TextAlign.center,
+                style: TextStyle(color: cs.outline),
+              ),
+            ),
+          )
+        else if (_byMessage)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+            sliver: SliverList.builder(
+              itemCount: logs.length,
+              itemBuilder: (context, i) => _logTile(cs, logs[i]),
+            ),
+          )
+        else
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Lịch sử nhắn tin trong ngày',
-                      style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final x in sessions)
-                        Container(
-                          width: (MediaQuery.of(context).size.width - 40) / 2,
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: cs.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Tệp tin: ${x.batch}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12.5)),
-                              Text('Mẫu tin: ${x.tpl}'),
-                              Text('Đã gửi: ${x.sent} khách hàng'
-                                  '${x.failed > 0 ? " (lỗi ${x.failed})" : ""}'),
-                              Text('Thời gian: ${fmtTime(x.startedAt)}',
-                                  style: TextStyle(
-                                      color: cs.outline, fontSize: 12)),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                  Center(
-                    child: TextButton(
-                      onPressed: () => _clearSessions(),
-                      child: const Text('XÓA LỊCH SỬ NHẮN TIN'),
+                  LayoutBuilder(
+                    builder: (context, box) => Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final x in sessions)
+                          _sessionCard(cs, x, (box.maxWidth - 8) / 2),
+                      ],
                     ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: _clearSessions,
+                    style: TextButton.styleFrom(foregroundColor: cs.error),
+                    icon: const Icon(Icons.delete_sweep_rounded),
+                    label: const Text('XÓA LỊCH SỬ NHẮN TIN'),
                   ),
                 ],
               ),
             ),
           ),
-        Expanded(
-          child: logs.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Text(
-                      isToday
-                          ? 'Hôm nay chưa gửi tin nào.'
-                          : 'Ngày này không có tin nào được gửi.',
-                      style: TextStyle(color: cs.outline),
-                    ),
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                  itemCount: logs.length,
-                  itemBuilder: (context, i) => _logTile(cs, logs[i]),
-                ),
-        ),
       ],
+    );
+  }
+
+  Widget _sessionCard(ColorScheme cs, SessionLog x, double width) {
+    final small = TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant);
+    return Container(
+      width: width,
+      padding: const EdgeInsets.all(10),
+      decoration: boxDecoration(cs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.description_rounded, size: 16, color: cs.primary),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(x.batch,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: cs.primary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12.5)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text('Mẫu tin: ${x.tpl}',
+              maxLines: 1, overflow: TextOverflow.ellipsis, style: small),
+          Text('Đã gửi: ${x.sent} khách hàng',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+          if (x.failed > 0)
+            Text('Lỗi: ${x.failed}',
+                style: TextStyle(fontSize: 12.5, color: cs.error)),
+          Text('Thời gian: ${fmtTime(x.startedAt)}', style: small),
+        ],
+      ),
     );
   }
 
@@ -277,13 +306,15 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Widget _num(BuildContext context, String label, int v, Color color) {
-    return Column(
-      children: [
-        Text('$v',
-            style: TextStyle(
-                fontSize: 24, fontWeight: FontWeight.w800, color: color)),
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
-      ],
+    return Expanded(
+      child: Column(
+        children: [
+          Text('$v',
+              style: TextStyle(
+                  fontSize: 22, fontWeight: FontWeight.w800, color: color)),
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      ),
     );
   }
 
@@ -299,17 +330,21 @@ class _HistoryPageState extends State<HistoryPage> {
       if (!ok) (c.error.isEmpty ? 'lỗi' : c.error),
     ];
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 6),
       elevation: 0,
-      color: cs.surfaceContainerHighest,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: cs.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: cs.outlineVariant.withAlpha(130)),
+      ),
       child: ListTile(
+        dense: true,
         leading: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               ok ? Icons.check_circle_rounded : Icons.error_rounded,
-              color: ok ? Colors.green : cs.error,
+              color: ok ? okColor(context) : cs.error,
               size: 22,
             ),
             const SizedBox(height: 2),
@@ -345,7 +380,7 @@ class _HistoryPageState extends State<HistoryPage> {
       );
     }
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
       itemCount: list.length,
       itemBuilder: (context, i) => _batchCard(context, cs, list[i]),
     );
@@ -360,12 +395,17 @@ class _HistoryPageState extends State<HistoryPage> {
     final working = isCurrent && appState.running;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 10),
       elevation: 0,
-      color: isCurrent ? cs.primaryContainer : cs.surfaceContainerHighest,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      color: cs.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+            color:
+                isCurrent ? cs.primary : cs.outlineVariant.withAlpha(130)),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -385,11 +425,11 @@ class _HistoryPageState extends State<HistoryPage> {
                   ),
                 ),
                 if (working)
-                  const _Tag('ĐANG GỬI', Colors.green)
+                  const Pill('ĐANG GỬI', Colors.green)
                 else if (isCurrent)
-                  const _Tag('ĐANG MỞ', Colors.teal)
+                  const Pill('ĐANG MỞ', Colors.teal)
                 else if (pending == 0)
-                  const _Tag('XONG', Colors.blueGrey),
+                  const Pill('XONG', Colors.blueGrey),
               ],
             ),
             const SizedBox(height: 4),
@@ -416,21 +456,8 @@ class _HistoryPageState extends State<HistoryPage> {
               children: [
                 for (final c in Carrier.values)
                   if (b.total(c) > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: c.color.withAlpha(30),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '${c.label} ${b.sent(c)}/${b.total(c) - b.skipped(c)}',
-                        style: TextStyle(
-                            color: c.color,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700),
-                      ),
-                    ),
+                    Pill('${c.label} ${b.sent(c)}/${b.total(c) - b.skipped(c)}',
+                        c.color),
               ],
             ),
             const SizedBox(height: 8),
@@ -491,25 +518,5 @@ class _HistoryPageState extends State<HistoryPage> {
     if (yes != true) return;
     final ok = await appState.deleteBatch(b.id);
     if (!ok) _snack('Đang gửi dở, không thể xoá danh sách này.');
-  }
-}
-
-class _Tag extends StatelessWidget {
-  final String text;
-  final Color color;
-  const _Tag(this.text, this.color);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withAlpha(35),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(text,
-          style: TextStyle(
-              color: color, fontSize: 10.5, fontWeight: FontWeight.w800)),
-    );
   }
 }
